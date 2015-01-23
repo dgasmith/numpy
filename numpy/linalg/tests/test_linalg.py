@@ -1303,7 +1303,10 @@ class TestContract(object):
     def setup(self):
         chars = 'abcdefghij'
         sizes = np.array([2, 3, 4, 5, 4, 3, 2, 6, 5, 4]) 
-        self.sizes = {c: s for c, s in zip(chars, sizes)}
+        size_dict = {}
+        for num in range(len(chars)):
+            size_dict[chars[num]] = sizes[num]
+        self.sizes = size_dict
 
     def compare(self, string):
         views = []

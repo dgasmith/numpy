@@ -2652,7 +2652,7 @@ def contract(subscripts, *operands, **kwargs):
     """
 
     # Parse input
-    if not isinstance(subscripts, basestring):
+    if not isinstance(subscripts, str):
         raise TypeError('Subscripts must be a string.')
 
     if ('-' in subscripts) or ('>' in subscripts):
