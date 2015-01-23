@@ -2685,7 +2685,7 @@ def contract(subscripts, *operands, **kwargs):
 
     # Build a few useful list and sets
     input_list = input_subscripts.split(',')
-    input_sets = map(set, input_list)
+    input_sets = list(map(set, input_list))
     output_set = set(output_subscript)
     indices = set(input_subscripts.replace(',', ''))
 
