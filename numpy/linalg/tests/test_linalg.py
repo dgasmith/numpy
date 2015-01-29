@@ -1330,6 +1330,17 @@ class TestContract(object):
         assert_raises(ValueError, linalg.contract, "...j$", [0, 0])
         assert_raises(ValueError, linalg.contract, "i->&", [0, 0])
 
+        # Invalid input subscripts
+        assert_raises(ValueError, linalg.contract, "ijk", [0])
+        assert_raises(ValueError, linalg.contract, "ijk", [[0], [0]])
+        assert_raises(ValueError, linalg.contract, "i", [[0], [0]])
+        assert_raises(ValueError, linalg.contract, "i,k", [0])
+        assert_raises(ValueError, linalg.contract, "i,i", [0], [0, 0])
+
+        # Wrong path type
+        # Buggy, does not raise unless three or more operands
+        assert_raises(KeyError, linalg.contract, 'i,i,i', [0], [0], [0], path='funky')
+
     def test_hadamard_like_products(self):
         self.compare('a,ab,abc->abc')
         self.compare('a,b,ab->ab')

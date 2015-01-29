@@ -2384,7 +2384,7 @@ def _find_contraction(positions, input_sets, output_set):
     -------
     new_result : set
         The indices of the resulting contraction
-    remaining : set
+    remaining : list
         List of sets that have not been contracted
     idx_removed : set
         Indices removed from the entire contraction
@@ -2411,7 +2411,7 @@ def _find_contraction(positions, input_sets, output_set):
 def _path_optimal(input_sets, output_set, idx_dict, memory_limit):
     """
     Computes all possible pair contractions, sieves the results based
-    on ``memory_limit`` and returns the cheapest path.
+    on ``memory_limit`` and returns the lowest cost path.
 
     Paramaters
     ----------
@@ -2433,11 +2433,13 @@ def _path_optimal(input_sets, output_set, idx_dict, memory_limit):
     current = [(0, [], input_sets)]
     for iteration in range(len(input_sets) - 1):
         new = []
+
         # Grab all unique pairs
         comb_iter = []
         for x in range(len(input_sets)):
             for y in range(x + 1, len(input_sets)):
-                comb_iter.append((x,y))
+                comb_iter.append((x, y))
+
         for curr in current:
             cost, positions, remaining = curr
             for con in comb_iter:
@@ -2474,9 +2476,12 @@ def _path_optimal(input_sets, output_set, idx_dict, memory_limit):
 
 def _path_opportunistic(input_sets, output_set, idx_dict, memory_limit):
     """
-    Finds the best pair contraction at each iteration. First considers GEMM or
-    inner product operations, then Hadamard like operations, and finally outer
-    operations. Outer products are limited by ``memory_limit``.
+    Finds the best pair contraction at each iteration. The best pair is found
+    by minimizing the tuple ``(-prod(indices_removed), cost)``.  Another way to say
+    this is it tries to remove the largest index at the lowest cost.  What this
+    amounts to is prioritizing matrix multiplication or inner product operations,
+    then Hadamard like operations, and finally outer operations. Outer products are
+    limited by ``memory_limit``.
 
     Paramaters
     ----------
@@ -2499,9 +2504,12 @@ def _path_opportunistic(input_sets, output_set, idx_dict, memory_limit):
     for iteration in range(len(input_sets) - 1):
         iteration_results = []
         comb_iter = []
+
+        # Grab all unique pairs
         for x in range(len(input_sets)):
             for y in range(x + 1, len(input_sets)):
-                comb_iter.append((x,y))
+                comb_iter.append((x, y))
+
         for positions in comb_iter:
 
             contract = _find_contraction(positions, input_sets, output_set)
@@ -2524,7 +2532,7 @@ def _path_opportunistic(input_sets, output_set, idx_dict, memory_limit):
             path.append(tuple(range(len(input_sets))))
             break
 
-        # Sort based on first idx
+        # Sort based on first index
         iteration_results.sort()
         best = iteration_results[0]
         path.append(best[1])
@@ -2611,16 +2619,16 @@ def contract(subscripts, *operands, **kwargs):
     then calling GEMV does not provide a speed up compared to calling einsum.
 
     For three or more operands contract computes the optimal order of two and
-    one operand operations.  The `optimal` path scales like N! where N is the
+    one operand operations.  The ``optimal`` path scales like N! where N is the
     number of terms and is found by calculating the cost of every possible path and
     choosing the lowest cost.  This path can be more costly to compute than the
-    contraction itself for a large number of terms (~N>7).  The `opportunistic`
+    contraction itself for a large number of terms (~N>7).  The ``opportunistic``
     path scales like N^3 and first tries to do any matrix matrix multiplications,
     then inner products, and finally outer products.  This path usually takes a
     trivial amount of time to compute unless the number of terms is extremely large
     (~N>20).  The opportunistic path typically computes the most optimal path, but
     is not guaranteed to do so.  Both of these algorithms are sieved by the
-    variable memory to prevent very large tensors from being formed.
+    variable memory to prevent the formation of very large tensors.
 
     Examples
     --------
@@ -2630,6 +2638,7 @@ def contract(subscripts, *operands, **kwargs):
     Note: BLAS will be True for all contractions here when everything is
     finished.
 
+    >>> from numpy.linalg import contract
     >>> I = np.random.rand(10, 10, 10, 10)
     >>> C = np.random.rand(10, 10)
     >>> opt_path = contract('ea,fb,abcd,gc,hd->efgh', C, C, I, C, C, return_path=True)
@@ -2646,7 +2655,9 @@ def contract(subscripts, *operands, **kwargs):
        5     False            bcde,fb->cdef                         gc,hd,cdef->efgh
        5     False            cdef,gc->defg                            hd,defg->efgh
        5     False            defg,hd->efgh                               efgh->efgh
-    >>> ein_result = np.einsum('ea,fb,abcd,gc,hd->efgh', C, C, I, C, C, path=opt_path[0])
+
+    >>> opt_result = contract('ea,fb,abcd,gc,hd->efgh', C, C, I, C, C, path=opt_path[0])
+    >>> ein_result = np.einsum('ea,fb,abcd,gc,hd->efgh', C, C, I, C, C)
     >>> np.allclose(ein_result, opt_result)
     True
     """
@@ -2685,7 +2696,7 @@ def contract(subscripts, *operands, **kwargs):
 
     # Build a few useful list and sets
     input_list = input_subscripts.split(',')
-    input_sets = list(map(set, input_list))
+    input_sets = [set(x) for x in input_list]
     output_set = set(output_subscript)
     indices = set(input_subscripts.replace(',', ''))
 
@@ -2695,8 +2706,8 @@ def contract(subscripts, *operands, **kwargs):
                           number of operands.")
 
     # TODO Should probably be cast up to double precision
-    arr_dtype = result_type(*operands)
     operands = [asanyarray(v) for v in operands]
+    arr_dtype = result_type(*operands)
     einsum_args = {'dtype': arr_dtype}
     #einsum_args = {'dtype': arr_dtype, 'order': 'C'}
 
@@ -2730,7 +2741,7 @@ def contract(subscripts, *operands, **kwargs):
 
     # If total flops is very small just avoid the overhead altogether
     # Currently invalidates testing script
-    total_flops = _compute_size_by_dict(indices, dimension_dict)
+    # total_flops = _compute_size_by_dict(indices, dimension_dict)
     # if (total_flops < 1e6) and not return_path_arg:
     #     return einsum(subscripts, *operands, **einsum_args)
 
