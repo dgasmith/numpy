@@ -319,6 +319,8 @@ def solve(a, b):
 
     Notes
     -----
+
+    .. versionadded:: 1.8.0
     Broadcasting rules apply, see the `numpy.linalg` documentation for
     details.
 
@@ -476,6 +478,8 @@ def inv(a):
 
     Notes
     -----
+
+    .. versionadded:: 1.8.0
     Broadcasting rules apply, see the `numpy.linalg` documentation for
     details.
 
@@ -553,6 +557,8 @@ def cholesky(a):
 
     Notes
     -----
+
+    .. versionadded:: 1.8.0
     Broadcasting rules apply, see the `numpy.linalg` documentation for
     details.
 
@@ -849,6 +855,8 @@ def eigvals(a):
 
     Notes
     -----
+
+    .. versionadded:: 1.8.0
     Broadcasting rules apply, see the `numpy.linalg` documentation for
     details.
 
@@ -937,6 +945,8 @@ def eigvalsh(a, UPLO='L'):
 
     Notes
     -----
+
+    .. versionadded:: 1.8.0
     Broadcasting rules apply, see the `numpy.linalg` documentation for
     details.
 
@@ -1010,13 +1020,18 @@ def eig(a):
 
     See Also
     --------
+    eigvals : eigenvalues of a non-symmetric array.
+
+    eigh : eigenvalues and eigenvectors of a symmetric or Hermitian 
+       (conjugate symmetric) array.
+
     eigvalsh : eigenvalues of a symmetric or Hermitian (conjugate symmetric)
        array.
 
-    eigvals : eigenvalues of a non-symmetric array.
-
     Notes
     -----
+
+    .. versionadded:: 1.8.0
     Broadcasting rules apply, see the `numpy.linalg` documentation for
     details.
 
@@ -1123,7 +1138,7 @@ def eigh(a, UPLO='L'):
 
     Parameters
     ----------
-    A : (..., M, M) array
+    a : (..., M, M) array
         Hermitian/Symmetric matrices whose eigenvalues and
         eigenvectors are to be computed.
     UPLO : {'L', 'U'}, optional
@@ -1152,6 +1167,8 @@ def eigh(a, UPLO='L'):
 
     Notes
     -----
+
+    .. versionadded:: 1.8.0
     Broadcasting rules apply, see the `numpy.linalg` documentation for
     details.
 
@@ -1259,6 +1276,8 @@ def svd(a, full_matrices=1, compute_uv=1):
 
     Notes
     -----
+
+    .. versionadded:: 1.8.0
     Broadcasting rules apply, see the `numpy.linalg` documentation for
     details.
 
@@ -1628,13 +1647,15 @@ def slogdet(a):
 
     Notes
     -----
+
+    .. versionadded:: 1.8.0
     Broadcasting rules apply, see the `numpy.linalg` documentation for
     details.
 
+    .. versionadded:: 1.6.0.
     The determinant is computed via LU factorization using the LAPACK
     routine z/dgetrf.
 
-    .. versionadded:: 1.6.0.
 
     Examples
     --------
@@ -1697,6 +1718,8 @@ def det(a):
 
     Notes
     -----
+
+    .. versionadded:: 1.8.0
     Broadcasting rules apply, see the `numpy.linalg` documentation for
     details.
 
@@ -2059,18 +2082,22 @@ def norm(x, ord=None, axis=None, keepdims=False):
     """
     x = asarray(x)
 
-    # Check the default case first and handle it immediately.
-    if ord is None and axis is None:
+    # Immediately handle some default, simple, fast, and common cases.
+    if axis is None:
         ndim = x.ndim
-        x = x.ravel(order='K')
-        if isComplexType(x.dtype.type):
-            sqnorm = dot(x.real, x.real) + dot(x.imag, x.imag)
-        else:
-            sqnorm = dot(x, x)
-        ret = sqrt(sqnorm)
-        if keepdims:
-            ret = ret.reshape(ndim*[1])
-        return ret
+        if ((ord is None) or
+            (ord in ('f', 'fro') and ndim == 2) or
+            (ord == 2 and ndim == 1)):
+
+            x = x.ravel(order='K')
+            if isComplexType(x.dtype.type):
+                sqnorm = dot(x.real, x.real) + dot(x.imag, x.imag)
+            else:
+                sqnorm = dot(x, x)
+            ret = sqrt(sqnorm)
+            if keepdims:
+                ret = ret.reshape(ndim*[1])
+            return ret
 
     # Normalize the `axis` argument to a tuple.
     nd = x.ndim
@@ -2119,10 +2146,14 @@ def norm(x, ord=None, axis=None, keepdims=False):
             return add.reduce(absx, axis=axis, keepdims=keepdims) ** (1.0 / ord)
     elif len(axis) == 2:
         row_axis, col_axis = axis
-        if not (-nd <= row_axis < nd and -nd <= col_axis < nd):
+        if row_axis < 0:
+            row_axis += nd
+        if col_axis < 0:
+            col_axis += nd
+        if not (0 <= row_axis < nd and 0 <= col_axis < nd):
             raise ValueError('Invalid axis %r for an array with shape %r' %
                              (axis, x.shape))
-        if row_axis % nd == col_axis % nd:
+        if row_axis == col_axis:
             raise ValueError('Duplicate axes given.')
         if ord == 2:
             ret =  _multi_svd_norm(x, row_axis, col_axis, amax)

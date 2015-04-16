@@ -194,6 +194,14 @@ class TestAttributes(TestCase):
             y[...] = 1
             assert_equal(x, y)
 
+    def test_fill_max_uint64(self):
+        x = empty((3, 2, 1), dtype=uint64)
+        y = empty((3, 2, 1), dtype=uint64)
+        value = 2**64 - 1
+        y[...] = value
+        x.fill(value)
+        assert_array_equal(x, y)
+
     def test_fill_struct_array(self):
         # Filling from a scalar
         x = array([(0, 0.0), (1, 1.0)], dtype='i4,f8')
@@ -1021,6 +1029,15 @@ class TestMethods(TestCase):
         d.sort()
         assert_equal(d, c, "test sort with default axis")
 
+        # check axis handling for multidimensional empty arrays
+        a = np.array([])
+        a.shape = (3, 2, 1, 0)
+        for axis in range(-a.ndim, a.ndim):
+            msg = 'test empty array sort with axis={0}'.format(axis)
+            assert_equal(np.sort(a, axis=axis), a, msg)
+        msg = 'test empty array sort with axis=None'
+        assert_equal(np.sort(a, axis=None), a.ravel(), msg)
+
     def test_copy(self):
         def assert_fortran(arr):
             assert_(arr.flags.fortran)
@@ -1181,7 +1198,6 @@ class TestMethods(TestCase):
             assert_equal(a.copy().argsort(kind=kind), r, msg)
             assert_equal(b.copy().argsort(kind=kind), rr, msg)
 
-
         # check axis handling. This should be the same for all type
         # specific argsorts, so we only check it for one type and one kind
         a = np.array([[3, 2], [1, 0]])
@@ -1192,6 +1208,18 @@ class TestMethods(TestCase):
         assert_equal(a.copy().argsort(), c)
         # using None is known fail at this point
         #assert_equal(a.copy().argsort(axis=None, c)
+
+        # check axis handling for multidimensional empty arrays
+        a = np.array([])
+        a.shape = (3, 2, 1, 0)
+        for axis in range(-a.ndim, a.ndim):
+            msg = 'test empty array argsort with axis={0}'.format(axis)
+            assert_equal(np.argsort(a, axis=axis),
+                         np.zeros_like(a, dtype=np.intp), msg)
+        msg = 'test empty array argsort with axis=None'
+        assert_equal(np.argsort(a, axis=None),
+                     np.zeros_like(a.ravel(), dtype=np.intp), msg)
+
 
         # check that stable argsorts are stable
         r = np.arange(100)
@@ -1416,6 +1444,50 @@ class TestMethods(TestCase):
         assert_equal(b, out)
         b = a.searchsorted(a, 'r', s)
         assert_equal(b, out + 1)
+
+    def test_argpartition_out_of_range(self):
+        # Test out of range values in kth raise an error, gh-5469
+        d = np.arange(10)
+        assert_raises(ValueError, d.argpartition, 10)
+        assert_raises(ValueError, d.argpartition, -11)
+        # Test also for generic type argpartition, which uses sorting
+        # and used to not bound check kth
+        d_obj = np.arange(10, dtype=object)
+        assert_raises(ValueError, d_obj.argpartition, 10)
+        assert_raises(ValueError, d_obj.argpartition, -11)
+
+    def test_partition_out_of_range(self):
+        # Test out of range values in kth raise an error, gh-5469
+        d = np.arange(10)
+        assert_raises(ValueError, d.partition, 10)
+        assert_raises(ValueError, d.partition, -11)
+        # Test also for generic type partition, which uses sorting
+        # and used to not bound check kth
+        d_obj = np.arange(10, dtype=object)
+        assert_raises(ValueError, d_obj.partition, 10)
+        assert_raises(ValueError, d_obj.partition, -11)
+
+    def test_partition_empty_array(self):
+        # check axis handling for multidimensional empty arrays
+        a = np.array([])
+        a.shape = (3, 2, 1, 0)
+        for axis in range(-a.ndim, a.ndim):
+            msg = 'test empty array partition with axis={0}'.format(axis)
+            assert_equal(np.partition(a, 0, axis=axis), a, msg)
+        msg = 'test empty array partition with axis=None'
+        assert_equal(np.partition(a, 0, axis=None), a.ravel(), msg)
+
+    def test_argpartition_empty_array(self):
+        # check axis handling for multidimensional empty arrays
+        a = np.array([])
+        a.shape = (3, 2, 1, 0)
+        for axis in range(-a.ndim, a.ndim):
+            msg = 'test empty array argpartition with axis={0}'.format(axis)
+            assert_equal(np.partition(a, 0, axis=axis),
+                         np.zeros_like(a, dtype=np.intp), msg)
+        msg = 'test empty array argpartition with axis=None'
+        assert_equal(np.partition(a, 0, axis=None),
+                     np.zeros_like(a.ravel(), dtype=np.intp), msg)
 
     def test_partition(self):
         d = np.arange(10)
@@ -1747,6 +1819,12 @@ class TestMethods(TestCase):
                tgt = np.sort(d)[kth]
                assert_array_equal(np.partition(d, kth)[kth], tgt,
                                   err_msg="data: %r\n kth: %r" % (d, kth))
+
+    def test_argpartition_gh5524(self):
+        #  A test for functionality of argpartition on lists.
+        d = [6,7,3,2,9,0]
+        p = np.argpartition(d,1)
+        self.assert_partitioned(np.array(d)[p],[1])
 
     def test_flatten(self):
         x0 = np.array([[1, 2, 3], [4, 5, 6]], np.int32)
@@ -2276,6 +2354,22 @@ class TestBinop(object):
         assert_equal(obj2.sum(), 42)
         assert_(isinstance(obj2, SomeClass2))
 
+    def test_ufunc_override_normalize_signature(self):
+        # gh-5674
+        class SomeClass(object):
+            def __numpy_ufunc__(self, ufunc, method, i, inputs, **kw):
+                return kw
+
+        a = SomeClass()
+        kw = np.add(a, [1])
+        assert_('sig' not in kw and 'signature' not in kw)
+        kw = np.add(a, [1], sig='ii->i')
+        assert_('sig' not in kw and 'signature' in kw)
+        assert_equal(kw['signature'], 'ii->i')
+        kw = np.add(a, [1], signature='ii->i')
+        assert_('sig' not in kw and 'signature' in kw)
+        assert_equal(kw['signature'], 'ii->i')
+
 
 class TestCAPI(TestCase):
     def test_IsPythonScalar(self):
@@ -2544,6 +2638,22 @@ class TestArgmax(TestCase):
         d[5942] = "as"
         assert_equal(d.argmax(), 5942)
 
+    def test_np_vs_ndarray(self):
+        # make sure both ndarray.argmax and numpy.argmax support out/axis args
+        a = np.random.normal(size=(2,3))
+
+        #check positional args
+        out1 = zeros(2, dtype=int)
+        out2 = zeros(2, dtype=int)
+        assert_equal(a.argmax(1, out1), np.argmax(a, 1, out2))
+        assert_equal(out1, out2)
+
+        #check keyword args
+        out1 = zeros(3, dtype=int)
+        out2 = zeros(3, dtype=int)
+        assert_equal(a.argmax(out=out1, axis=0), np.argmax(a, out=out2, axis=0))
+        assert_equal(out1, out2)
+
 
 class TestArgmin(TestCase):
 
@@ -2653,6 +2763,22 @@ class TestArgmin(TestCase):
         d = np.ones(6031, dtype='<U9')
         d[6001] = "0"
         assert_equal(d.argmin(), 6001)
+
+    def test_np_vs_ndarray(self):
+        # make sure both ndarray.argmin and numpy.argmin support out/axis args
+        a = np.random.normal(size=(2,3))
+
+        #check positional args
+        out1 = zeros(2, dtype=int)
+        out2 = ones(2, dtype=int)
+        assert_equal(a.argmin(1, out1), np.argmin(a, 1, out2))
+        assert_equal(out1, out2)
+
+        #check keyword args
+        out1 = zeros(3, dtype=int)
+        out2 = ones(3, dtype=int)
+        assert_equal(a.argmin(out=out1, axis=0), np.argmin(a, out=out2, axis=0))
+        assert_equal(out1, out2)
 
 
 class TestMinMax(TestCase):

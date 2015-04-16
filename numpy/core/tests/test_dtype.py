@@ -3,6 +3,7 @@ from __future__ import division, absolute_import, print_function
 import sys
 import numpy as np
 from numpy.testing import *
+from numpy.core.test_rational import rational
 
 def assert_dtype_equal(a, b):
     assert_equal(a, b)
@@ -123,6 +124,21 @@ class TestRecord(TestCase):
                       'formats': ['u1', 'u1'],
                       'titles': ['RRed pixel', 'Blue pixel']})
         assert_dtype_not_equal(a, b)
+
+    def test_mutate(self):
+        # Mutating a dtype should reset the cached hash value
+        a = np.dtype([('yo', np.int)])
+        b = np.dtype([('yo', np.int)])
+        c = np.dtype([('ye', np.int)])
+        assert_dtype_equal(a, b)
+        assert_dtype_not_equal(a, c)
+        a.names = ['ye']
+        assert_dtype_equal(a, c)
+        assert_dtype_not_equal(a, b)
+        state = b.__reduce__()[2]
+        a.__setstate__(state)
+        assert_dtype_equal(a, b)
+        assert_dtype_not_equal(a, c)
 
     def test_not_lists(self):
         """Test if an appropriate exception is raised when passing bad values to
@@ -531,6 +547,12 @@ class TestDtypeAttributes(TestCase):
         # Ticket #4357
         class user_def_subcls(np.void): pass
         assert_equal(np.dtype(user_def_subcls).name, 'user_def_subcls')
+
+
+def test_rational_dtype():
+    # test for bug gh-5719
+    a = np.array([1111], dtype=rational).astype
+    assert_raises(OverflowError, a, 'int8')
 
 
 if __name__ == "__main__":

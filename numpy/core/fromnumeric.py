@@ -526,6 +526,8 @@ def transpose(a, axes=None):
     Use `transpose(a, argsort(axes))` to invert the transposition of tensors
     when using the `axes` keyword argument.
 
+    Transposing a 1-D array returns an unchanged view of the original array.
+
     Examples
     --------
     >>> x = np.arange(4).reshape((2,2))
@@ -691,8 +693,16 @@ def argpartition(a, kth, axis=-1, kind='introselect', order=None):
     >>> x[np.argpartition(x, (1, 3))]
     array([1, 2, 3, 4])
 
+    >>> x = [3, 4, 2, 1]
+    >>> np.array(x)[np.argpartition(x, 3)]
+    array([2, 1, 3, 4])
+
     """
-    return a.argpartition(kth, axis, kind=kind, order=order)
+    try:
+        argpartition = a.argpartition
+    except AttributeError:
+        return _wrapit(a, 'argpartition',kth, axis, kind, order)
+    return argpartition(kth, axis, kind=kind, order=order)
 
 
 def sort(a, axis=-1, kind='quicksort', order=None):
@@ -890,7 +900,7 @@ def argsort(a, axis=-1, kind='quicksort', order=None):
     return argsort(axis, kind, order)
 
 
-def argmax(a, axis=None):
+def argmax(a, axis=None, out=None):
     """
     Returns the indices of the maximum values along an axis.
 
@@ -901,6 +911,9 @@ def argmax(a, axis=None):
     axis : int, optional
         By default, the index is into the flattened array, otherwise
         along the specified axis.
+    out : array, optional
+        If provided, the result will be inserted into this array. It should
+        be of the appropriate shape and dtype.
 
     Returns
     -------
@@ -943,11 +956,11 @@ def argmax(a, axis=None):
     try:
         argmax = a.argmax
     except AttributeError:
-        return _wrapit(a, 'argmax', axis)
-    return argmax(axis)
+        return _wrapit(a, 'argmax', axis, out)
+    return argmax(axis, out)
 
 
-def argmin(a, axis=None):
+def argmin(a, axis=None, out=None):
     """
     Returns the indices of the minimum values along an axis.
 
@@ -958,6 +971,9 @@ def argmin(a, axis=None):
     axis : int, optional
         By default, the index is into the flattened array, otherwise
         along the specified axis.
+    out : array, optional
+        If provided, the result will be inserted into this array. It should
+        be of the appropriate shape and dtype.
 
     Returns
     -------
@@ -1000,8 +1016,8 @@ def argmin(a, axis=None):
     try:
         argmin = a.argmin
     except AttributeError:
-        return _wrapit(a, 'argmin', axis)
-    return argmin(axis)
+        return _wrapit(a, 'argmin', axis, out)
+    return argmin(axis, out)
 
 
 def searchsorted(a, v, side='left', sorter=None):

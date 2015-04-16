@@ -97,10 +97,11 @@ def unique(ar, return_index=False, return_inverse=False, return_counts=False):
     """
     Find the unique elements of an array.
 
-    Returns the sorted unique elements of an array. There are two optional
+    Returns the sorted unique elements of an array. There are three optional
     outputs in addition to the unique elements: the indices of the input array
-    that give the unique values, and the indices of the unique array that
-    reconstruct the input array.
+    that give the unique values, the indices of the unique array that
+    reconstruct the input array, and the number of times each unique value
+    comes up in the input array.
 
     Parameters
     ----------
@@ -392,12 +393,13 @@ def in1d(ar1, ar2, assume_unique=False, invert=False):
     else:
         bool_ar = (sar[1:] == sar[:-1])
     flag = np.concatenate((bool_ar, [invert]))
-    indx = order.argsort(kind='mergesort')[:len(ar1)]
+    ret = np.empty(ar.shape, dtype=bool)
+    ret[order] = flag
 
     if assume_unique:
-        return flag[indx]
+        return ret[:len(ar1)]
     else:
-        return flag[indx][rev_idx]
+        return ret[rev_idx]
 
 def union1d(ar1, ar2):
     """

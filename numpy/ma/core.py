@@ -681,6 +681,9 @@ def fix_invalid(a, mask=nomask, copy=True, fill_value=None):
     ----------
     a : array_like
         Input array, a (subclass of) ndarray.
+    mask : sequence, optional
+        Mask. Must be convertible to an array of booleans with the same
+        shape as `data`. True indicates a masked (i.e. invalid) data.
     copy : bool, optional
         Whether to use a copy of `a` (True) or to fix `a` in place (False).
         Default is True.
@@ -3802,7 +3805,10 @@ class MaskedArray(ndarray):
         else:
             if m is not nomask:
                 self._mask += m
-        ndarray.__iadd__(self._data, np.where(self._mask, 0, getdata(other)))
+        ndarray.__iadd__(
+            self._data,
+            np.where(self._mask, self.dtype.type(0), getdata(other))
+        )
         return self
     #....
     def __isub__(self, other):
@@ -3814,7 +3820,10 @@ class MaskedArray(ndarray):
                 self._mask += m
         elif m is not nomask:
             self._mask += m
-        ndarray.__isub__(self._data, np.where(self._mask, 0, getdata(other)))
+        ndarray.__isub__(
+            self._data,
+            np.where(self._mask, self.dtype.type(0), getdata(other))
+        )
         return self
     #....
     def __imul__(self, other):
@@ -3826,7 +3835,10 @@ class MaskedArray(ndarray):
                 self._mask += m
         elif m is not nomask:
             self._mask += m
-        ndarray.__imul__(self._data, np.where(self._mask, 1, getdata(other)))
+        ndarray.__imul__(
+            self._data,
+            np.where(self._mask, self.dtype.type(1), getdata(other))
+        )
         return self
     #....
     def __idiv__(self, other):
@@ -3841,7 +3853,10 @@ class MaskedArray(ndarray):
             other_data = np.where(dom_mask, fval, other_data)
 #        self._mask = mask_or(self._mask, new_mask)
         self._mask |= new_mask
-        ndarray.__idiv__(self._data, np.where(self._mask, 1, other_data))
+        ndarray.__idiv__(
+            self._data,
+            np.where(self._mask, self.dtype.type(1), other_data)
+        )
         return self
     #....
     def __ifloordiv__(self, other):
@@ -3856,7 +3871,10 @@ class MaskedArray(ndarray):
             other_data = np.where(dom_mask, fval, other_data)
 #        self._mask = mask_or(self._mask, new_mask)
         self._mask |= new_mask
-        ndarray.__ifloordiv__(self._data, np.where(self._mask, 1, other_data))
+        ndarray.__ifloordiv__(
+            self._data,
+            np.where(self._mask, self.dtype.type(1), other_data)
+        )
         return self
     #....
     def __itruediv__(self, other):
@@ -3871,7 +3889,10 @@ class MaskedArray(ndarray):
             other_data = np.where(dom_mask, fval, other_data)
 #        self._mask = mask_or(self._mask, new_mask)
         self._mask |= new_mask
-        ndarray.__itruediv__(self._data, np.where(self._mask, 1, other_data))
+        ndarray.__itruediv__(
+            self._data,
+            np.where(self._mask, self.dtype.type(1), other_data)
+        )
         return self
     #...
     def __ipow__(self, other):
@@ -3879,7 +3900,10 @@ class MaskedArray(ndarray):
         other_data = getdata(other)
         other_mask = getmask(other)
         with np.errstate(divide='ignore', invalid='ignore'):
-            ndarray.__ipow__(self._data, np.where(self._mask, 1, other_data))
+            ndarray.__ipow__(
+                self._data,
+                np.where(self._mask, self.dtype.type(1), other_data)
+            )
         invalid = np.logical_not(np.isfinite(self._data))
         if invalid.any():
             if self._mask is not nomask:
@@ -4497,6 +4521,26 @@ class MaskedArray(ndarray):
             D = self.diagonal(offset=offset, axis1=axis1, axis2=axis2)
             return D.astype(dtype).filled(0).sum(axis=None, out=out)
     trace.__doc__ = ndarray.trace.__doc__
+
+    def dot(self, other, out=None):
+        am = ~getmaskarray(self)
+        bm = ~getmaskarray(other)
+        if out is None:
+            d = np.dot(filled(self, 0), filled(other, 0))
+            m = ~np.dot(am, bm)
+            if d.ndim == 0:
+                d = np.asarray(d)
+            r = d.view(get_masked_subclass(self, other))
+            r.__setmask__(m)
+            return r
+        d = self.filled(0).dot(other.filled(0), out._data)
+        if out.mask.shape != d.shape:
+            out._mask = numpy.empty(d.shape, MaskType)
+        np.dot(am, bm, out._mask)
+        np.logical_not(out._mask, out._mask)
+        return out
+    dot.__doc__ = ndarray.dot.__doc__
+
 
     def sum(self, axis=None, dtype=None, out=None):
         """
@@ -7357,21 +7401,21 @@ def append(a, b, axis=None):
 
     Parameters
     ----------
-    arr : array_like
+    a : array_like
         Values are appended to a copy of this array.
-    values : array_like
-        These values are appended to a copy of `arr`.  It must be of the
-        correct shape (the same shape as `arr`, excluding `axis`).  If `axis`
-        is not specified, `values` can be any shape and will be flattened
+    b : array_like
+        These values are appended to a copy of `a`.  It must be of the
+        correct shape (the same shape as `a`, excluding `axis`).  If `axis`
+        is not specified, `b` can be any shape and will be flattened
         before use.
     axis : int, optional
-        The axis along which `values` are appended.  If `axis` is not given,
-        both `arr` and `values` are flattened before use.
+        The axis along which `v` are appended.  If `axis` is not given,
+        both `a` and `b` are flattened before use.
 
     Returns
     -------
     append : MaskedArray
-        A copy of `arr` with `values` appended to `axis`.  Note that `append`
+        A copy of `a` with `b` appended to `axis`.  Note that `append`
         does not occur in-place: a new array is allocated and filled.  If
         `axis` is None, the result is a flattened array.
 
