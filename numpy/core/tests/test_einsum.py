@@ -465,63 +465,50 @@ class TestEinSum(TestCase):
         assert_equal(np.einsum('z,mz,zm->', p, q, r), 253)
 
     def test_einsum_sums_int8(self):
-        # self.check_einsum_sums('i1', True );
         self.check_einsum_sums('i1', False);
 
     def test_einsum_sums_uint8(self):
-        # self.check_einsum_sums('u1', True );
         self.check_einsum_sums('u1', False);
 
     def test_einsum_sums_int16(self):
-        # self.check_einsum_sums('i2', True );
         self.check_einsum_sums('i2', False);
 
     def test_einsum_sums_uint16(self):
-        # self.check_einsum_sums('u2', True );
         self.check_einsum_sums('u2', False);
 
     def test_einsum_sums_int32(self):
-        # self.check_einsum_sums('i4', True );
         self.check_einsum_sums('i4', False);
 
     def test_einsum_sums_uint32(self):
-        # self.check_einsum_sums('u4', True );
         self.check_einsum_sums('u4', False);
 
     def test_einsum_sums_int64(self):
-        # self.check_einsum_sums('i8', True );
         self.check_einsum_sums('i8', False);
 
     def test_einsum_sums_uint64(self):
-        # self.check_einsum_sums('u8', True );
         self.check_einsum_sums('u8', False);
 
     def test_einsum_sums_float16(self):
-        # self.check_einsum_sums('f2', True );
         self.check_einsum_sums('f2', False);
 
     def test_einsum_sums_float32(self):
-        # self.check_einsum_sums('f4', True );
         self.check_einsum_sums('f4', False);
 
     def test_einsum_sums_float64(self):
-        # self.check_einsum_sums('f8', True );
+        self.check_einsum_sums('f8', True);
         self.check_einsum_sums('f8', False);
 
     def test_einsum_sums_longdouble(self):
-        # self.check_einsum_sums(np.longdouble, True );
         self.check_einsum_sums(np.longdouble, False);
 
     def test_einsum_sums_cfloat64(self):
-        # self.check_einsum_sums('c8', True );
+        self.check_einsum_sums('c8', True);
         self.check_einsum_sums('c8', False);
 
     def test_einsum_sums_cfloat128(self):
-        # self.check_einsum_sums('c16', True );
         self.check_einsum_sums('c16', False);
 
     def test_einsum_sums_clongdouble(self):
-        # self.check_einsum_sums(np.clongdouble, True );
         self.check_einsum_sums(np.clongdouble, False);
 
     def test_einsum_misc(self):
@@ -530,12 +517,15 @@ class TestEinSum(TestCase):
         a = np.ones((1, 2))
         b = np.ones((2, 2, 1))
         assert_equal(np.einsum('ij...,j...->i...', a, b), [[[2], [2]]])
+        assert_equal(np.einsum('ij...,j...->i...', a, b, optimize=True), [[[2], [2]]])
 
         # The iterator had an issue with buffering this reduction
         a = np.ones((5, 12, 4, 2, 3), np.int64)
         b = np.ones((5, 12, 11), np.int64)
         assert_equal(np.einsum('ijklm,ijn,ijn->', a, b, b),
                         np.einsum('ijklm,ijn->', a, b))
+        assert_equal(np.einsum('ijklm,ijn,ijn->', a, b, b, optimize=True),
+                        np.einsum('ijklm,ijn->', a, b, optimize=True))
 
         # Issue #2027, was a problem in the contiguous 3-argument
         # inner loop implementation
@@ -545,6 +535,9 @@ class TestEinSum(TestCase):
         assert_equal(np.einsum('x,yx,zx->xzy', a, b, c),
                     [[[1,  3], [3,  9], [5, 15], [7, 21]],
                     [[8, 16], [16, 32], [24, 48], [32, 64]]])
+        assert_equal(np.einsum('x,yx,zx->xzy', a, b, c, optimize=True),
+                    [[[1,  3], [3,  9], [5, 15], [7, 21]],
+                    [[8, 16], [16, 32], [24, 48], [32, 64]]])
 
     def test_einsum_broadcast(self):
         # Issue #2455 change in handling ellipsis
@@ -552,6 +545,7 @@ class TestEinSum(TestCase):
         # only use the 'RIGHT' iteration in prepare_op_axes
         # adds auto broadcast on left where it belongs
         # broadcast on right has to be explicit
+        # We need to test the optimized parsing as well
 
         A = np.arange(2*3*4).reshape(2,3,4)
         B = np.arange(3)
@@ -560,6 +554,10 @@ class TestEinSum(TestCase):
         assert_equal(np.einsum('ij...,...j->ij...',A, B), ref)
         assert_equal(np.einsum('ij...,j->ij...',A, B), ref) # used to raise error
 
+        assert_equal(np.einsum('ij...,j...->ij...',A, B, optimize=True), ref)
+        assert_equal(np.einsum('ij...,...j->ij...',A, B, optimize=True), ref)
+        assert_equal(np.einsum('ij...,j->ij...',A, B, optimize=True), ref) # used to raise error
+
         A = np.arange(12).reshape((4,3))
         B = np.arange(6).reshape((3,2))
         ref = np.einsum('ik,kj->ij', A, B)
@@ -567,6 +565,11 @@ class TestEinSum(TestCase):
         assert_equal(np.einsum('ik...,...kj->i...j', A, B), ref)
         assert_equal(np.einsum('...k,kj', A, B), ref) # used to raise error
         assert_equal(np.einsum('ik,k...->i...', A, B), ref) # used to raise error
+
+        assert_equal(np.einsum('ik...,k...->i...', A, B, optimize=True), ref)
+        assert_equal(np.einsum('ik...,...kj->i...j', A, B, optimize=True), ref)
+        assert_equal(np.einsum('...k,kj', A, B, optimize=True), ref) # used to raise error
+        assert_equal(np.einsum('ik,k...->i...', A, B, optimize=True), ref) # used to raise error
 
         dims=[2,3,4,5];
         a = np.arange(np.prod(dims)).reshape(dims)
@@ -577,11 +580,16 @@ class TestEinSum(TestCase):
         assert_equal(np.einsum('...kl,k...', a, v), ref)
         # no real diff from 1st
 
+        assert_equal(np.einsum('ijkl,k', a, v, optimize=True), ref)
+        assert_equal(np.einsum('...kl,k', a, v, optimize=True), ref)  # used to raise error
+        assert_equal(np.einsum('...kl,k...', a, v, optimize=True), ref)
+
         J,K,M=160,160,120;
         A=np.arange(J*K*M).reshape(1,1,1,J,K,M)
         B=np.arange(J*K*M*3).reshape(J,K,M,3)
         ref = np.einsum('...lmn,...lmno->...o', A, B)
         assert_equal(np.einsum('...lmn,lmno->...o', A, B), ref)  # used to raise error
+        assert_equal(np.einsum('...lmn,lmno->...o', A, B, optimize=True), ref)  # used to raise error
 
     def test_einsum_fixedstridebug(self):
         # Issue #4485 obscure einsum bug
@@ -624,7 +632,7 @@ class TestEinSum(TestCase):
         assert_equal(y1, y2)
 
     # Below tests optimization function
-    def compare(self, string):
+    def optimize_compare(self, string):
         operands = [string]
         terms = string.split('->')[0].split(',')
         for term in terms:
@@ -638,89 +646,89 @@ class TestEinSum(TestCase):
         assert_allclose(opt, noopt)
 
     def test_hadamard_like_products(self):
-        self.compare('a,ab,abc->abc')
-        self.compare('a,b,ab->ab')
+        self.optimize_compare('a,ab,abc->abc')
+        self.optimize_compare('a,b,ab->ab')
 
     def test_index_transformations(self):
-        self.compare('ea,fb,gc,hd,abcd->efgh')
-        self.compare('ea,fb,abcd,gc,hd->efgh')
-        self.compare('abcd,ea,fb,gc,hd->efgh')
+        self.optimize_compare('ea,fb,gc,hd,abcd->efgh')
+        self.optimize_compare('ea,fb,abcd,gc,hd->efgh')
+        self.optimize_compare('abcd,ea,fb,gc,hd->efgh')
     
     def test_complex(self):
-        self.compare('acdf,jbje,gihb,hfac,gfac,gifabc,hfac')
-        self.compare('acdf,jbje,gihb,hfac,gfac,gifabc,hfac')
-        self.compare('cd,bdhe,aidb,hgca,gc,hgibcd,hgac')
-        self.compare('abhe,hidj,jgba,hiab,gab')
-        self.compare('bde,cdh,agdb,hica,ibd,hgicd,hiac')
-        self.compare('chd,bde,agbc,hiad,hgc,hgi,hiad')
-        self.compare('chd,bde,agbc,hiad,bdi,cgh,agdb')
-        self.compare('bdhe,acad,hiab,agac,hibd')
+        self.optimize_compare('acdf,jbje,gihb,hfac,gfac,gifabc,hfac')
+        self.optimize_compare('acdf,jbje,gihb,hfac,gfac,gifabc,hfac')
+        self.optimize_compare('cd,bdhe,aidb,hgca,gc,hgibcd,hgac')
+        self.optimize_compare('abhe,hidj,jgba,hiab,gab')
+        self.optimize_compare('bde,cdh,agdb,hica,ibd,hgicd,hiac')
+        self.optimize_compare('chd,bde,agbc,hiad,hgc,hgi,hiad')
+        self.optimize_compare('chd,bde,agbc,hiad,bdi,cgh,agdb')
+        self.optimize_compare('bdhe,acad,hiab,agac,hibd')
 
     def test_collapse(self):
-        self.compare('ab,ab,c->')
-        self.compare('ab,ab,c->c')
-        self.compare('ab,ab,cd,cd->')
-        self.compare('ab,ab,cd,cd->ac')
-        self.compare('ab,ab,cd,cd->cd')
-        self.compare('ab,ab,cd,cd,ef,ef->')
+        self.optimize_compare('ab,ab,c->')
+        self.optimize_compare('ab,ab,c->c')
+        self.optimize_compare('ab,ab,cd,cd->')
+        self.optimize_compare('ab,ab,cd,cd->ac')
+        self.optimize_compare('ab,ab,cd,cd->cd')
+        self.optimize_compare('ab,ab,cd,cd,ef,ef->')
 
     def test_expand(self):
-        self.compare('ab,cd,ef->abcdef')
-        self.compare('ab,cd,ef->acdf')
-        self.compare('ab,cd,de->abcde')
-        self.compare('ab,cd,de->be')
-        self.compare('ab,bcd,cd->abcd')
-        self.compare('ab,bcd,cd->abd') 
+        self.optimize_compare('ab,cd,ef->abcdef')
+        self.optimize_compare('ab,cd,ef->acdf')
+        self.optimize_compare('ab,cd,de->abcde')
+        self.optimize_compare('ab,cd,de->be')
+        self.optimize_compare('ab,bcd,cd->abcd')
+        self.optimize_compare('ab,bcd,cd->abd') 
 
     def test_previously_failed(self):
         # Random test cases that have previously failed
-        self.compare('eb,cb,fb->cef')
-        self.compare('dd,fb,be,cdb->cef')
-        self.compare('bca,cdb,dbf,afc->')
-        self.compare('dcc,fce,ea,dbf->ab')
-        self.compare('fdf,cdd,ccd,afe->ae')
-        self.compare('abcd,ad')
-        self.compare('ed,fcd,ff,bcf->be')
-        self.compare('baa,dcf,af,cde->be')
-        self.compare('bd,db,eac->ace')
-        self.compare('fff,fae,bef,def->abd')
-        self.compare('efc,dbc,acf,fd->abe')
-        self.compare('ba,ac,da->bcd')
+        self.optimize_compare('eb,cb,fb->cef')
+        self.optimize_compare('dd,fb,be,cdb->cef')
+        self.optimize_compare('bca,cdb,dbf,afc->')
+        self.optimize_compare('dcc,fce,ea,dbf->ab')
+        self.optimize_compare('fdf,cdd,ccd,afe->ae')
+        self.optimize_compare('abcd,ad')
+        self.optimize_compare('ed,fcd,ff,bcf->be')
+        self.optimize_compare('baa,dcf,af,cde->be')
+        self.optimize_compare('bd,db,eac->ace')
+        self.optimize_compare('fff,fae,bef,def->abd')
+        self.optimize_compare('efc,dbc,acf,fd->abe')
+        self.optimize_compare('ba,ac,da->bcd')
 
     def test_inner_product(self): 
         # Inner products
-        self.compare('ab,ab')
-        self.compare('ab,ba')
-        self.compare('abc,abc')
-        self.compare('abc,bac')
-        self.compare('abc,cba')
+        self.optimize_compare('ab,ab')
+        self.optimize_compare('ab,ba')
+        self.optimize_compare('abc,abc')
+        self.optimize_compare('abc,bac')
+        self.optimize_compare('abc,cba')
 
     # Not applicable until tensordot implementation
     #def test_dot_product(self):
     #    # GEMM test cases
-    #    self.compare('ab,bc')
-    #    self.compare('ab,cb')
-    #    self.compare('ba,bc')
-    #    self.compare('ba,cb')
-    #    self.compare('abcd,cd')
-    #    self.compare('abcd,ab')
-    #    self.compare('abcd,cdef')
-    #    self.compare('abcd,cdef->feba')
-    #    self.compare('abcd,efdc')
+    #    self.optimize_compare('ab,bc')
+    #    self.optimize_compare('ab,cb')
+    #    self.optimize_compare('ba,bc')
+    #    self.optimize_compare('ba,cb')
+    #    self.optimize_compare('abcd,cd')
+    #    self.optimize_compare('abcd,ab')
+    #    self.optimize_compare('abcd,cdef')
+    #    self.optimize_compare('abcd,cdef->feba')
+    #    self.optimize_compare('abcd,efdc')
 
     def test_random_cases(self):
         # Randomly build test caes
-        self.compare('aab,fa,df,ecc->bde')
-        self.compare('ecb,fef,bad,ed->ac')
-        self.compare('bcf,bbb,fbf,fc->')
-        self.compare('bb,ff,be->e')
-        self.compare('bcb,bb,fc,fff->')
-        self.compare('fbb,dfd,fc,fc->')
-        self.compare('afd,ba,cc,dc->bf')
-        self.compare('adb,bc,fa,cfc->d')
-        self.compare('bbd,bda,fc,db->acf')
-        self.compare('dba,ead,cad->bce')
-        self.compare('aef,fbc,dca->bde')
+        self.optimize_compare('aab,fa,df,ecc->bde')
+        self.optimize_compare('ecb,fef,bad,ed->ac')
+        self.optimize_compare('bcf,bbb,fbf,fc->')
+        self.optimize_compare('bb,ff,be->e')
+        self.optimize_compare('bcb,bb,fc,fff->')
+        self.optimize_compare('fbb,dfd,fc,fc->')
+        self.optimize_compare('afd,ba,cc,dc->bf')
+        self.optimize_compare('adb,bc,fa,cfc->d')
+        self.optimize_compare('bbd,bda,fc,db->acf')
+        self.optimize_compare('dba,ead,cad->bce')
+        self.optimize_compare('aef,fbc,dca->bde')
 
 if __name__ == "__main__":
     run_module_suite()
