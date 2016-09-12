@@ -127,7 +127,6 @@ def _optimal_path(input_sets, output_set, idx_dict, memory_limit):
     [(0, 2), (0, 1)]
     """
 
-
     full_results = [(0, [], input_sets)]
     for iteration in range(len(input_sets) - 1):
         iter_results = []
@@ -143,8 +142,8 @@ def _optimal_path(input_sets, output_set, idx_dict, memory_limit):
             for con in comb_iter:
 
                 # Find the contraction
-                contract = _find_contraction(con, remaining, output_set)
-                new_result, new_input_sets, idx_removed, idx_contract = contract
+                cont = _find_contraction(con, remaining, output_set)
+                new_result, new_input_sets, idx_removed, idx_contract = cont
 
                 # Sieve the results based on memory_limit
                 new_size = _compute_size_by_dict(new_result, idx_dict)
@@ -179,8 +178,8 @@ def _greedy_path(input_sets, output_set, idx_dict, memory_limit):
     ``(-prod(indices_removed), cost)``.  What this amounts to is prioritizing
     matrix multiplication or inner product operations, then Hadamard like
     operations, and finally outer operations. Outer products are limited by
-    ``memory_limit``. This algorithm scales cubically with respect to the number of
-    elements in the list ``input_sets``.
+    ``memory_limit``. This algorithm scales cubically with respect to the
+    number of elements in the list ``input_sets``.
 
     Paramaters
     ----------
@@ -247,7 +246,6 @@ def _greedy_path(input_sets, output_set, idx_dict, memory_limit):
         best = min(iteration_results, key=lambda x: x[0])
         path.append(best[1])
         input_sets = best[2]
-
 
     return path
 
@@ -356,7 +354,8 @@ def _parse_einsum_input(operands):
                 if operands[num].shape == ():
                     ellipse_count = 0
                 else:
-                    ellipse_count = max(len(operands[num].shape), 1) - (len(sub) - 3)
+                    ellipse_count = max(len(operands[num].shape), 1)
+                    ellipse_count -= (len(sub) - 3)
 
                 if ellipse_count > longest:
                     longest = ellipse_count
@@ -366,7 +365,8 @@ def _parse_einsum_input(operands):
                 elif ellipse_count == 0:
                     split_subscripts[num] = sub.replace('...', '')
                 else:
-                    split_subscripts[num] = sub.replace('...', ellipse_inds[-ellipse_count:])
+                    rep_inds = ellipse_inds[-ellipse_count:]
+                    split_subscripts[num] = sub.replace('...', rep_inds)
 
         subscripts = ",".join(split_subscripts)
         if longest == 0:
@@ -385,7 +385,8 @@ def _parse_einsum_input(operands):
                     raise ValueError("Character %s is not a valid symbol." % s)
                 if tmp_subscripts.count(s) == 1:
                     output_subscript += s
-            normal_inds = ''.join(sorted(set(output_subscript) - set(out_ellipse)))
+            normal_inds = ''.join(sorted(set(output_subscript) -
+                                         set(out_ellipse)))
 
             subscripts += "->" + out_ellipse + normal_inds
 
@@ -406,7 +407,8 @@ def _parse_einsum_input(operands):
     # Make sure output subscripts are in the input
     for char in output_subscript:
         if char not in input_subscripts:
-            raise ValueError("Output character %s did not appear in the input" % char)
+            raise ValueError("Output character %s did not appear in the input"
+                             % char)
 
     # Make sure number operands is equivalent to the number of terms
     if len(input_subscripts.split(',')) != len(operands):
@@ -418,6 +420,8 @@ def _parse_einsum_input(operands):
 
 def einsum_path(*operands, **kwargs):
     """
+    einsum_path(subscripts, *operands, optimize=True, memory_limit=None)
+
     Evaluates the lowest cost einsum-like contraction order.
 
     Parameters
@@ -426,40 +430,49 @@ def einsum_path(*operands, **kwargs):
         Specifies the subscripts for summation.
     *operands : list of array_like
         These are the arrays for the operation.
-    optimize : bool or list, optional (default: ``greedy``)
+    optimize : {bool, list, 'greedy', 'optimal'}
         Choose the type of path.
 
-        - if a list is given uses this as the path.
-        - 'greedy' An algorithm that chooses the best pair contraction
-            at each step. Scales cubically with the number of terms in the
-            contraction.
-        - 'optimal' An algorithm that tries all possible ways of
-            contracting the listed tensors. Scales exponentially with
-            the number of terms in the contraction.
-
-    memory_limit : int, optional (default: largest input or output array size)
-        Maximum number of elements allowed in intermediate arrays.
+        * if a list is given uses this as the path.
+        * 'optimal' An algorithm that combinatorially explores all possible
+          ways of contracting the listed tensors and choosest the least costly
+          path. Scales exponentially with the number of terms in the
+          contraction.
+        * 'greedy' An algorithm that chooses the best pair contraction
+          at each step. Effectively, this algorithm searches the largest inner,
+          Hadamard, and then outer products at each step. Scales cubically with
+          the number of terms in the contraction. Equivalent to the 'optimal'
+          path for most contractions.
+    memory_limit : int, optional
+        If provided, restricts the size of intermediate arrays created by the
+        `optimize` argument to this number of elements. Otherwise, the largest
+        input or output array size is used as a memory_limit.
 
     Returns
     -------
     path : list of tuples
-        The einsum path
+        A list representation of the einsum path
     string_repr : str
-        A printable representation of the path
+        A printable representation of the einsum path
 
     Notes
     -----
     The resulting path indicates which terms of the input contraction should be
-    contracted first, the result of this contraction is then appended to the end of
-    the contraction list.
+    contracted first, the result of this contraction is then appended to the
+    end of the contraction list. This list can then be iterated over until all
+    intermediate contractions are complete.
+
+    See Also
+    --------
+    einsum
 
     Examples
     --------
 
-    We can begin with a chain dot example. In this case it is optimal to
-    contract the b and c tensors reprsented by the first element of the path (1,
-    2). The resulting tensor is added to the end of the contraction and the
-    remaining contraction (0, 1) is then completed.
+    We can begin with a chain dot example. In this case, it is optimal to
+    contract the b and c tensors first as reprsented by the first element of
+    the path (1, 2). The resulting tensor is added to the end of the
+    contraction and the remaining contraction (0, 1) is then completed.
 
     >>> a = np.random.rand(2, 2)
     >>> b = np.random.rand(2, 5)
@@ -509,9 +522,11 @@ def einsum_path(*operands, **kwargs):
 
     # Make sure all keywords are valid
     valid_contract_kwargs = ['optimize', 'memory_limit', 'einsum_call']
-    unknown_kwargs = [k for (k, v) in kwargs.items() if k not in valid_contract_kwargs]
+    unknown_kwargs = [k for (k, v) in kwargs.items() if k
+                      not in valid_contract_kwargs]
     if len(unknown_kwargs):
-        raise TypeError("einsum_path: Did not understand the following kwargs: %s" % unknown_kwargs)
+        raise TypeError("Did not understand the following kwargs:"
+                        " %s" % unknown_kwargs)
 
     path_type = kwargs.pop('optimize', 'greedy')
     memory_limit = kwargs.pop('memory_limit', None)
@@ -578,7 +593,7 @@ def einsum_path(*operands, **kwargs):
     elif (indices == output_set):
         # If no rank reduction leave it to einsum
         path = [tuple(range(len(input_list)))]
-    elif (path_type in ["greedy", "opportunistic"]):
+    elif path_type == "greedy":
         # Maximum memory should be at most out_size for this algorithm
         memory_arg = min(memory_arg, max_size)
         path = _greedy_path(input_sets, output_set, dimension_dict, memory_arg)
@@ -631,13 +646,16 @@ def einsum_path(*operands, **kwargs):
     overall_contraction = input_subscripts + "->" + output_subscript
     header = ("scaling", "current", "remaining")
 
+    speedup = naive_cost / float(opt_cost)
+    max_i = max(size_list)
+
     path_print  = "  Complete contraction:  %s\n" % overall_contraction
     path_print += "         Naive scaling:  %d\n" % len(indices)
     path_print += "     Optimized scaling:  %d\n" % max(scale_list)
     path_print += "      Naive FLOP count:  %.3e\n" % naive_cost
     path_print += "  Optimized FLOP count:  %.3e\n" % opt_cost
-    path_print += "   Theoretical speedup:  %3.3f\n" % (naive_cost / float(opt_cost))
-    path_print += "  Largest intermediate:  %.3e elements\n" % max(size_list)
+    path_print += "   Theoretical speedup:  %3.3f\n" % speedup
+    path_print += "  Largest intermediate:  %.3e elements\n" % max_i
     path_print += "-" * 74 + "\n"
     path_print += "%6s %24s %40s\n" % header
     path_print += "-" * 74
@@ -654,7 +672,242 @@ def einsum_path(*operands, **kwargs):
 # Rewrite einsum to handle different cases
 def einsum(*operands, **kwargs):
     """
-    New features in 1.1 ...
+    einsum(subscripts, *operands, out=None, dtype=None, order='K',
+           casting='safe', optimize=True, memory_limit=None)
+
+    Evaluates the Einstein summation convention on the operands.
+
+    Using the Einstein summation convention, many common multi-dimensional
+    array operations can be represented in a simple fashion.  This function
+    provides a way to compute such summations. The best way to understand this
+    function is to try the examples below, which show how many common NumPy
+    functions can be implemented as calls to `einsum`.
+
+    Parameters
+    ----------
+    subscripts : str
+        Specifies the subscripts for summation.
+    operands : list of array_like
+        These are the arrays for the operation.
+    out : ndarray, optional
+        If provided, the calculation is done into this array.
+    dtype : data-type, optional
+        If provided, forces the calculation to use the data type specified.
+        Note that you may have to also give a more liberal `casting`
+        parameter to allow the conversions.
+    order : {'C', 'F', 'A', 'K'}, optional
+        Controls the memory layout of the output. 'C' means it should
+        be C contiguous. 'F' means it should be Fortran contiguous,
+        'A' means it should be 'F' if the inputs are all 'F', 'C' otherwise.
+        'K' means it should be as close to the layout as the inputs as
+        is possible, including arbitrarily permuted axes.
+        Default is 'K'.
+    casting : {'no', 'equiv', 'safe', 'same_kind', 'unsafe'}, optional
+        Controls what kind of data casting may occur.  Setting this to
+        'unsafe' is not recommended, as it can adversely affect accumulations.
+
+          * 'no' means the data types should not be cast at all.
+          * 'equiv' means only byte-order changes are allowed.
+          * 'safe' means only casts which can preserve values are allowed.
+          * 'same_kind' means only safe casts or casts within a kind,
+            like float64 to float32, are allowed.
+          * 'unsafe' means any data conversions may be done.
+    optimize : {False, True, 'greedy', 'optimal'}, optional
+        Controls if intermediate optimization should occur. No optimization
+        will occur if False and True will default to the 'greedy' algorithm.
+        Also accepts an explicit contraction list from the ``np.einsum_path``
+        function.
+        See ``np.einsum_path`` for more details.
+    memory_limit : int, optional
+        If provided, restricts the size of intermediate arrays created by the
+        `optimize` argument to this number of elements. Otherwise, the largest
+        input or output array size is used as a memory_limit.
+
+    Returns
+    -------
+    output : ndarray
+        The calculation based on the Einstein summation convention.
+
+    See Also
+    --------
+    einsum_path, dot, inner, outer, tensordot
+
+    Notes
+    -----
+    .. versionadded:: 1.6.0
+
+    The subscripts string is a comma-separated list of subscript labels,
+    where each label refers to a dimension of the corresponding operand.
+    Repeated subscripts labels in one operand take the diagonal.  For example,
+    ``np.einsum('ii', a)`` is equivalent to ``np.trace(a)``.
+
+    Whenever a label is repeated, it is summed, so ``np.einsum('i,i', a, b)``
+    is equivalent to ``np.inner(a,b)``.  If a label appears only once,
+    it is not summed, so ``np.einsum('i', a)`` produces a view of ``a``
+    with no changes.
+
+    The order of labels in the output is by default alphabetical.  This
+    means that ``np.einsum('ij', a)`` doesn't affect a 2D array, while
+    ``np.einsum('ji', a)`` takes its transpose.
+
+    The output can be controlled by specifying output subscript labels
+    as well.  This specifies the label order, and allows summing to
+    be disallowed or forced when desired.  The call ``np.einsum('i->', a)``
+    is like ``np.sum(a, axis=-1)``, and ``np.einsum('ii->i', a)``
+    is like ``np.diag(a)``.  The difference is that `einsum` does not
+    allow broadcasting by default.
+
+    To enable and control broadcasting, use an ellipsis.  Default
+    NumPy-style broadcasting is done by adding an ellipsis
+    to the left of each term, like ``np.einsum('...ii->...i', a)``.
+    To take the trace along the first and last axes,
+    you can do ``np.einsum('i...i', a)``, or to do a matrix-matrix
+    product with the left-most indices instead of rightmost, you can do
+    ``np.einsum('ij...,jk...->ik...', a, b)``.
+
+    When there is only one operand, no axes are summed, and no output
+    parameter is provided, a view into the operand is returned instead
+    of a new array.  Thus, taking the diagonal as ``np.einsum('ii->i', a)``
+    produces a view.
+
+    An alternative way to provide the subscripts and operands is as
+    ``einsum(op0, sublist0, op1, sublist1, ..., [sublistout])``. The examples
+    below have corresponding `einsum` calls with the two parameter methods.
+
+    .. versionadded:: 1.10.0
+
+    Views returned from einsum are now writeable whenever the input array
+    is writeable. For example, ``np.einsum('ijk...->kji...', a)`` will now
+    have the same effect as ``np.swapaxes(a, 0, 2)`` and
+    ``np.einsum('ii->i', a)`` will return a writeable view of the diagonal
+    of a 2D array.
+
+    .. versionadded:: 1.12.0
+
+    Added the ``optimize`` argument which will optimize the contraction order
+    of an einsum expression. For a contraction with three or more operands this
+    can greatly increase the computational efficiency at the cost of a larger
+    memory footprint during computation.
+
+    See ``np.einsum_path`` for more details.
+
+    Examples
+    --------
+    >>> a = np.arange(25).reshape(5,5)
+    >>> b = np.arange(5)
+    >>> c = np.arange(6).reshape(2,3)
+
+    >>> np.einsum('ii', a)
+    60
+    >>> np.einsum(a, [0,0])
+    60
+    >>> np.trace(a)
+    60
+
+    >>> np.einsum('ii->i', a)
+    array([ 0,  6, 12, 18, 24])
+    >>> np.einsum(a, [0,0], [0])
+    array([ 0,  6, 12, 18, 24])
+    >>> np.diag(a)
+    array([ 0,  6, 12, 18, 24])
+
+    >>> np.einsum('ij,j', a, b)
+    array([ 30,  80, 130, 180, 230])
+    >>> np.einsum(a, [0,1], b, [1])
+    array([ 30,  80, 130, 180, 230])
+    >>> np.dot(a, b)
+    array([ 30,  80, 130, 180, 230])
+    >>> np.einsum('...j,j', a, b)
+    array([ 30,  80, 130, 180, 230])
+
+    >>> np.einsum('ji', c)
+    array([[0, 3],
+           [1, 4],
+           [2, 5]])
+    >>> np.einsum(c, [1,0])
+    array([[0, 3],
+           [1, 4],
+           [2, 5]])
+    >>> c.T
+    array([[0, 3],
+           [1, 4],
+           [2, 5]])
+
+    >>> np.einsum('..., ...', 3, c)
+    array([[ 0,  3,  6],
+           [ 9, 12, 15]])
+    >>> np.einsum(3, [Ellipsis], c, [Ellipsis])
+    array([[ 0,  3,  6],
+           [ 9, 12, 15]])
+    >>> np.multiply(3, c)
+    array([[ 0,  3,  6],
+           [ 9, 12, 15]])
+
+    >>> np.einsum('i,i', b, b)
+    30
+    >>> np.einsum(b, [0], b, [0])
+    30
+    >>> np.inner(b,b)
+    30
+
+    >>> np.einsum('i,j', np.arange(2)+1, b)
+    array([[0, 1, 2, 3, 4],
+           [0, 2, 4, 6, 8]])
+    >>> np.einsum(np.arange(2)+1, [0], b, [1])
+    array([[0, 1, 2, 3, 4],
+           [0, 2, 4, 6, 8]])
+    >>> np.outer(np.arange(2)+1, b)
+    array([[0, 1, 2, 3, 4],
+           [0, 2, 4, 6, 8]])
+
+    >>> np.einsum('i...->...', a)
+    array([50, 55, 60, 65, 70])
+    >>> np.einsum(a, [0,Ellipsis], [Ellipsis])
+    array([50, 55, 60, 65, 70])
+    >>> np.sum(a, axis=0)
+    array([50, 55, 60, 65, 70])
+
+    >>> a = np.arange(60.).reshape(3,4,5)
+    >>> b = np.arange(24.).reshape(4,3,2)
+    >>> np.einsum('ijk,jil->kl', a, b)
+    array([[ 4400.,  4730.],
+           [ 4532.,  4874.],
+           [ 4664.,  5018.],
+           [ 4796.,  5162.],
+           [ 4928.,  5306.]])
+    >>> np.einsum(a, [0,1,2], b, [1,0,3], [2,3])
+    array([[ 4400.,  4730.],
+           [ 4532.,  4874.],
+           [ 4664.,  5018.],
+           [ 4796.,  5162.],
+           [ 4928.,  5306.]])
+    >>> np.tensordot(a,b, axes=([1,0],[0,1]))
+    array([[ 4400.,  4730.],
+           [ 4532.,  4874.],
+           [ 4664.,  5018.],
+           [ 4796.,  5162.],
+           [ 4928.,  5306.]])
+
+    >>> a = np.arange(6).reshape((3,2))
+    >>> b = np.arange(12).reshape((4,3))
+    >>> np.einsum('ki,jk->ij', a, b)
+    array([[10, 28, 46, 64],
+           [13, 40, 67, 94]])
+    >>> np.einsum('ki,...k->i...', a, b)
+    array([[10, 28, 46, 64],
+           [13, 40, 67, 94]])
+    >>> np.einsum('k...,jk', a, b)
+    array([[10, 28, 46, 64],
+           [13, 40, 67, 94]])
+
+    >>> # since version 1.10.0
+    >>> a = np.zeros((3, 3))
+    >>> np.einsum('ii->i', a)[:] = 1
+    >>> a
+    array([[ 1.,  0.,  0.],
+           [ 0.,  1.,  0.],
+           [ 0.,  0.,  1.]])
+
     """
 
     # Grab non-einsum kwargs
@@ -663,17 +916,20 @@ def einsum(*operands, **kwargs):
         optimize_arg = 'greedy'
 
     valid_einsum_kwargs = ['out', 'dtype', 'order', 'casting']
-    einsum_kwargs = {k: v for (k, v) in kwargs.items() if k in valid_einsum_kwargs}
+    einsum_kwargs = {k: v for (k, v) in kwargs.items() if
+                     k in valid_einsum_kwargs}
+
+    # Make sure all keywords are valid
+    valid_contract_kwargs = ['optimize', 'memory_limit'] + valid_einsum_kwargs
+    unknown_kwargs = [k for (k, v) in kwargs.items() if
+                      k not in valid_contract_kwargs]
+    if len(unknown_kwargs):
+        raise TypeError("Did not understand the following kwargs: %s"
+                        % unknown_kwargs)
 
     # If no optimization, run pure einsum
     if (optimize_arg is False):
         return c_einsum(*operands, **einsum_kwargs)
-
-    # Make sure all keywords are valid
-    valid_contract_kwargs = ['optimize', 'memory_limit'] + valid_einsum_kwargs
-    unknown_kwargs = [k for (k, v) in kwargs.items() if k not in valid_contract_kwargs]
-    if len(unknown_kwargs):
-        raise TypeError("Did not understand the following kwargs: %s" % unknown_kwargs)
 
     # Special handeling if out is specified
     specified_out = False
@@ -684,8 +940,8 @@ def einsum(*operands, **kwargs):
     # Build the contraction list and operand
     memory_limit = kwargs.pop('memory_limit', None)
     operands, contraction_list = einsum_path(*operands, optimize=optimize_arg,
-                                               memory_limit=memory_limit,
-                                               einsum_call=True)
+                                             memory_limit=memory_limit,
+                                             einsum_call=True)
 
     # Start contraction loop
     for num, contraction in enumerate(contraction_list):
